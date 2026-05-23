@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Samsung Phone AR OBJ Viewer version 54</title>
+  <style>
+    :root {
+      --bg: #070a10;
+      --panel: rgba(13, 17, 25, 0.91);
+      --panel2: rgba(255,255,255,0.075);
+      --text: #f4f7fb;
+      --muted: #b7c0d1;
+      --line: rgba(255,255,255,0.15);
+      --accent: #73c6ff;
+      --good: #91f0af;
+      --bad: #ff8f8f;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    #setupPanel {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      width: min(460px, calc(100vw - 24px));
+      max-height: calc(100dvh - 86px);
+      overflow: auto;
+      z-index: 20;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+      backdrop-filter: blur(12px);
+    }
+    #setupPanel.collapsed { width: auto; max-height: none; }
+    #setupPanel.collapsed .panelBody { display: none; }
+    .titlebar { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+    h1 { font-size: 18px; line-height: 1.15; margin: 0; letter-spacing: -.02em; }
+    .sub { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 11px 0; }
+    button, .fileButton, select, input[type="number"] {
+      appearance: none;
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: var(--panel2);
+      border-radius: 13px;
+      min-height: 42px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 650;
+      font-family: inherit;
+    }
+    button, .fileButton { cursor: pointer; user-select: none; }
+    button.primary, .fileButton.primary {
+      border-color: rgba(115,198,255,0.5);
+      background: rgba(115,198,255,0.17);
+    }
+    button.small { min-height: 35px; padding: 7px 10px; font-size: 13px; }
+    input[type="file"] { display: none; }
+    input[type="number"] { width: 104px; font-weight: 500; }
+    select { width: 170px; font-weight: 500; }
+    input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+    .section {
+      margin-top: 11px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .sectionTitle { font-size: 14px; font-weight: 760; margin-bottom: 8px; }
+    .control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+    }
+    .control b { font-size: 13px; }
+    .control span, .hint { font-size: 12px; line-height: 1.42; color: var(--muted); }
+    .axisGrid { display: grid; grid-template-columns: 30px 1fr 1fr; align-items: center; gap: 7px; }
+    .axisLabel { color: var(--muted); font-weight: 800; text-align: center; }
+    .axisGrid button { padding: 9px 8px; min-height: 39px; }
+    #rotationReadout, #dimensionsReadout {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.45;
+    }
+    #status {
+      margin-top: 10px;
+      min-height: 44px;
+      padding: 10px;
+      border-radius: 13px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.22);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .ok { color: var(--good); }
+    .err { color: var(--bad); }
+    #messageChip {
+      display: none;
+      position: fixed;
+      top: max(16px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: calc(100vw - 32px);
+      z-index: 35;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(115,198,255,0.55);
+      background: rgba(8, 19, 28, 0.83);
+      font-size: 13px;
+      font-weight: 750;
+      text-align: center;
+      pointer-events: none;
+      backdrop-filter: blur(10px);
+    }
+    #messageChip.show { display: block; }
+    #arToolbar {
+      display: none;
+      position: fixed;
+      z-index: 30;
+      left: max(10px, env(safe-area-inset-left));
+      right: max(10px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(8, 11, 17, .84);
+      backdrop-filter: blur(12px);
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #arToolbar.active { display: flex; }
+    #arToolbar button { min-height: 40px; padding: 8px 11px; font-size: 13px; flex: 1 1 auto; }
+    #ARButton {
+      position: fixed !important;
+      right: max(12px, env(safe-area-inset-right)) !important;
+      bottom: max(12px, env(safe-area-inset-bottom)) !important;
+      left: auto !important;
+      z-index: 26 !important;
+      min-width: 138px !important;
+      border-radius: 999px !important;
+      padding: 13px 17px !important;
+      border: 1px solid rgba(115,198,255,0.56) !important;
+      background: rgba(115,198,255,0.21) !important;
+      color: #fff !important;
+      font: 750 14px system-ui, sans-serif !important;
+    }
+    body.inAR #ARButton { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 61px) !important; }
+    @media (max-width: 560px) {
+      h1 { font-size: 16px; }
+      .row .fileButton, .row button { flex: 1 1 135px; text-align: center; }
+      #setupPanel { max-height: calc(100dvh - 82px); }
+      #arToolbar button { min-width: 64px; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="messageChip">Scan a floor, then tap to place the model</div>
+
+  <div id="setupPanel">
+    <div class="titlebar">
+      <div>
+        <h1>Samsung Phone AR OBJ Viewer version 54</h1>
+        <div class="sub">Phone AR only · OBJ exported in <b>millimetres</b> displays at true 1:1 size</div>
+      </div>
+      <button id="collapseBtn" type="button" class="small">Hide</button>
+    </div>
+
+    <div class="panelBody">
+      <div class="row">
+        <label for="objInput" class="fileButton primary">Choose OBJ</label>
+        <input id="objInput" type="file" accept=".obj" />
+        <label for="materialInput" class="fileButton">Add MTL / textures</label>
+        <input id="materialInput" type="file" multiple accept=".mtl,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" />
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">AR placement</div>
+        <div class="control">
+          <div><b>Move model on each tap</b><br><span>While in AR, aim the reticle at the real floor or table and tap to place/re-place it.</span></div>
+          <input id="tapReplaceInput" type="checkbox" checked />
+        </div>
+        <div class="control">
+          <div><b>Face phone on placement</b><br><span>Turns the upright model towards you when it is placed. Use rotate buttons for adjustments.</span></div>
+          <input id="faceCameraInput" type="checkbox" checked />
+        </div>
+        <div class="control">
+          <div><b>Placement height offset</b><br><span>Fine adjustment above the detected surface, in millimetres.</span></div>
+          <input id="heightOffsetInput" type="number" min="-1000" max="3000" step="1" value="0" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">True-size model setup</div>
+        <div class="control">
+          <div><b>Scale locked at 0.001</b><br><span>Fusion/CAD millimetres are converted to WebXR metres. Pinch scaling is intentionally disabled.</span></div>
+          <input type="number" value="0.001" disabled />
+        </div>
+        <div class="control">
+          <div><b>CAD Z-up fix</b><br><span>Leave on when your OBJ was exported with Z as the vertical axis.</span></div>
+          <input id="zUpInput" type="checkbox" checked />
+        </div>
+        <div class="control">
+          <div><b>Longest axis vertical</b><br><span>Useful for standing a rocket or aircraft model upright automatically.</span></div>
+          <input id="longestAxisVerticalInput" type="checkbox" checked />
+        </div>
+        <div id="dimensionsReadout">Load an OBJ to see its true-size dimensions.</div>
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">Rotate model in 90° steps</div>
+        <div class="axisGrid">
+          <div class="axisLabel">X</div><button data-axis="x" data-dir="-1">X −90°</button><button data-axis="x" data-dir="1">X +90°</button>
+          <div class="axisLabel">Y</div><button data-axis="y" data-dir="-1">Y −90°</button><button data-axis="y" data-dir="1">Y +90°</button>
+          <div class="axisLabel">Z</div><button data-axis="z" data-dir="-1">Z −90°</button><button data-axis="z" data-dir="1">Z +90°</button>
+        </div>
+        <div class="row"><button id="resetOrientationBtn" type="button" class="small">Reset orientation</button></div>
+        <div id="rotationReadout">Extra orientation: X 0°, Y 0°, Z 0°</div>
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">Optional height ruler</div>
+        <div class="control">
+          <div><b>Ruler beside model</b><br><span>Starts from the real surface where the model was placed and remains true-size.</span></div>
+          <select id="rulerInput">
+            <option value="off" selected>Off</option>
+            <option value="1">1 metre</option>
+            <option value="2">2 metres</option>
+            <option value="model">Model full length</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="forgetPlacementBtn" type="button">Re-place in AR</button>
+        <button id="resetAllBtn" type="button">Reset controls</button>
+      </div>
+
+      <div id="status">Choose an OBJ, optionally add its MTL/textures, then press <b>ENTER AR</b>. In AR, slowly move the phone to detect a surface and tap the view to place the model.</div>
+      <p class="hint">Use this page in Chrome on an ARCore-compatible Samsung phone. AR requires a secure HTTPS address; opening the HTML as a local file will not start WebXR AR.</p>
+    </div>
+  </div>
+
+  <div id="arToolbar" aria-label="AR model controls">
+    <button id="turnLeftBtn" type="button">↺ Turn</button>
+    <button id="turnRightBtn" type="button">Turn ↻</button>
+    <button id="lowerBtn" type="button">↓ 10 mm</button>
+    <button id="raiseBtn" type="button">↑ 10 mm</button>
+    <button id="replaceBtn" type="button" class="primary">Place again</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+    import { ARButton } from "three/addons/webxr/ARButton.js";
+
+    const LOCKED_MODEL_SCALE = 0.001; // Fusion/CAD mm -> WebXR metres.
+    const X_AXIS = new THREE.Vector3(1, 0, 0);
+    const Y_AXIS = new THREE.Vector3(0, 1, 0);
+    const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+    const setupPanel = document.getElementById("setupPanel");
+    const collapseBtn = document.getElementById("collapseBtn");
+    const statusEl = document.getElementById("status");
+    const messageChip = document.getElementById("messageChip");
+    const arToolbar = document.getElementById("arToolbar");
+    const objInput = document.getElementById("objInput");
+    const materialInput = document.getElementById("materialInput");
+    const zUpInput = document.getElementById("zUpInput");
+    const longestAxisVerticalInput = document.getElementById("longestAxisVerticalInput");
+    const tapReplaceInput = document.getElementById("tapReplaceInput");
+    const faceCameraInput = document.getElementById("faceCameraInput");
+    const heightOffsetInput = document.getElementById("heightOffsetInput");
+    const rulerInput = document.getElementById("rulerInput");
+    const rotationReadout = document.getElementById("rotationReadout");
+    const dimensionsReadout = document.getElementById("dimensionsReadout");
+
+    let chipTimer = 0;
+    function showChip(text, seconds = 2.3) {
+      messageChip.textContent = text;
+      messageChip.classList.add("show");
+      chipTimer = seconds;
+    }
+    function setStatus(html, error = false) {
+      statusEl.innerHTML = error ? `<span class="err">${html}</span>` : html;
+    }
+
+    // DOM overlay buttons should not also generate an XR screen-tap placement event.
+    [setupPanel, arToolbar].forEach((el) => {
+      el.addEventListener("beforexrselect", (event) => event.preventDefault());
+    });
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.body.insertBefore(renderer.domElement, setupPanel);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x55616f, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.9);
+    sun.position.set(2, 4, 3);
+    scene.add(sun);
+
+    // A bright ring follows a WebXR hit-test surface. A phone screen tap places the OBJ here.
+    const reticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.065, 0.083, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x73c6ff, transparent: true, opacity: 0.96, side: THREE.DoubleSide })
+    );
+    reticle.matrixAutoUpdate = false;
+    reticle.visible = false;
+    scene.add(reticle);
+
+    const placementRoot = new THREE.Group();
+    placementRoot.name = "surface_placement_root";
+    placementRoot.visible = false;
+    scene.add(placementRoot);
+
+    const modelPivot = new THREE.Group();
+    modelPivot.name = "true_size_model_pivot";
+    placementRoot.add(modelPivot);
+
+    const rulerGroup = new THREE.Group();
+    rulerGroup.name = "true_size_height_ruler";
+    placementRoot.add(rulerGroup);
+
+    let loadedObject = null;
+    let sourceOBJText = "";
+    let sourceOBJName = "";
+    let selectedMaterialCreator = null;
+    let materialURLMap = new Map();
+    let materialBlobURLs = [];
+    let placed = false;
+    let userYaw = 0;
+    let placedSurfaceY = 0;
+    const extraRotationDeg = { x: 0, y: 0, z: 0 };
+    const modelInfo = { loaded: false, size: new THREE.Vector3(), longest: 0, localBox: new THREE.Box3() };
+    const tempPosition = new THREE.Vector3();
+    const tempQuaternion = new THREE.Quaternion();
+    const tempScale = new THREE.Vector3();
+    const cameraWorldPosition = new THREE.Vector3();
+
+    function disposeObject3D(root) {
+      if (!root) return;
+      root.traverse((child) => {
+        child.geometry?.dispose?.();
+        const materials = child.material ? (Array.isArray(child.material) ? child.material : [child.material]) : [];
+        materials.forEach((material) => {
+          material?.map?.dispose?.();
+          material?.dispose?.();
+        });
+      });
+    }
+
+    function clearMaterialURLs() {
+      materialBlobURLs.forEach((url) => URL.revokeObjectURL(url));
+      materialBlobURLs = [];
+      materialURLMap.clear();
+    }
+
+    function basename(url) {
+      const clean = decodeURIComponent(String(url || "").split("?")[0].split("#")[0]);
+      return clean.substring(clean.lastIndexOf("/") + 1).toLowerCase();
+    }
+
+    function makeLoadingManager() {
+      const manager = new THREE.LoadingManager();
+      manager.setURLModifier((url) => materialURLMap.get(basename(url)) || url);
+      return manager;
+    }
+
+    async function loadMaterials(files) {
+      clearMaterialURLs();
+      selectedMaterialCreator = null;
+      const availableFiles = Array.from(files || []);
+      const mtlFile = availableFiles.find((file) => /\.mtl$/i.test(file.name));
+      availableFiles.forEach((file) => {
+        if (!/\.mtl$/i.test(file.name)) {
+          const url = URL.createObjectURL(file);
+          materialBlobURLs.push(url);
+          materialURLMap.set(file.name.toLowerCase(), url);
+        }
+      });
+      if (!mtlFile) {
+        setStatus("Textures selected, but no <b>.mtl</b> file was included. Add the MTL file along with its texture images.", true);
+        return;
+      }
+      try {
+        const mtlText = await mtlFile.text();
+        selectedMaterialCreator = new MTLLoader(makeLoadingManager()).parse(mtlText, "");
+        selectedMaterialCreator.preload();
+        if (sourceOBJText) buildModelFromOBJ();
+        setStatus(`<span class="ok">Materials loaded:</span> ${mtlFile.name}. The model will use matching selected textures.`);
+      } catch (error) {
+        setStatus(`Could not read materials: ${error.message}`, true);
+      }
+    }
+
+    function calculateBaseOrientation() {
+      const qZUp = new THREE.Quaternion();
+      if (zUpInput.checked) qZUp.setFromAxisAngle(X_AXIS, -Math.PI / 2);
+      modelPivot.position.set(0, 0, 0);
+      modelPivot.quaternion.copy(qZUp);
+      modelPivot.updateMatrixWorld(true);
+      const initialBox = new THREE.Box3().setFromObject(modelPivot);
+      const size = initialBox.getSize(new THREE.Vector3());
+      const qAuto = new THREE.Quaternion();
+      if (longestAxisVerticalInput.checked) {
+        if (size.x >= size.y && size.x >= size.z) qAuto.setFromAxisAngle(Z_AXIS, Math.PI / 2);
+        else if (size.z >= size.x && size.z >= size.y) qAuto.setFromAxisAngle(X_AXIS, -Math.PI / 2);
+      }
+      return qAuto.multiply(qZUp);
+    }
+
+    function applyModelOrientation() {
+      if (!loadedObject) return;
+      const savedPosition = placementRoot.position.clone();
+      const savedQuaternion = placementRoot.quaternion.clone();
+      placementRoot.position.set(0, 0, 0);
+      placementRoot.quaternion.identity();
+      modelPivot.position.set(0, 0, 0);
+
+      const qBase = calculateBaseOrientation();
+      const qExtra = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        THREE.MathUtils.degToRad(extraRotationDeg.x),
+        THREE.MathUtils.degToRad(extraRotationDeg.y),
+        THREE.MathUtils.degToRad(extraRotationDeg.z),
+        "XYZ"
+      ));
+      modelPivot.quaternion.copy(qExtra).multiply(qBase);
+      modelPivot.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(modelPivot);
+      const centre = box.getCenter(new THREE.Vector3());
+      modelPivot.position.set(-centre.x, -box.min.y, -centre.z);
+      modelPivot.updateMatrixWorld(true);
+      const centredBox = new THREE.Box3().setFromObject(modelPivot);
+      centredBox.getSize(modelInfo.size);
+      modelInfo.localBox.copy(centredBox);
+      modelInfo.longest = Math.max(modelInfo.size.x, modelInfo.size.y, modelInfo.size.z);
+      modelInfo.loaded = true;
+
+      placementRoot.position.copy(savedPosition);
+      placementRoot.quaternion.copy(savedQuaternion);
+      placementRoot.updateMatrixWorld(true);
+      rebuildRuler();
+      updateReadouts();
+    }
+
+    function applyNeutralMaterialIfNeeded(object) {
+      object.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = false;
+          child.receiveShadow = false;
+          if (!child.material) {
+            child.material = new THREE.MeshStandardMaterial({ color: 0xc7d2df, roughness: 0.65, metalness: 0.05 });
+          }
+        }
+      });
+    }
+
+    function buildModelFromOBJ() {
+      if (!sourceOBJText) return;
+      try {
+        if (loadedObject) {
+          modelPivot.remove(loadedObject);
+          disposeObject3D(loadedObject);
+        }
+        const objLoader = new OBJLoader(makeLoadingManager());
+        if (selectedMaterialCreator) objLoader.setMaterials(selectedMaterialCreator);
+        loadedObject = objLoader.parse(sourceOBJText);
+        loadedObject.scale.setScalar(LOCKED_MODEL_SCALE);
+        applyNeutralMaterialIfNeeded(loadedObject);
+        modelPivot.add(loadedObject);
+        applyModelOrientation();
+        placementRoot.visible = renderer.xr.isPresenting && placed;
+        setStatus(`<span class="ok">OBJ loaded:</span> ${sourceOBJName}. Press <b>ENTER AR</b>, scan a real surface, then tap to place it at true size.`);
+      } catch (error) {
+        setStatus(`Could not parse OBJ: ${error.message}`, true);
+      }
+    }
+
+    function updateReadouts() {
+      rotationReadout.textContent = `Extra orientation: X ${extraRotationDeg.x}°, Y ${extraRotationDeg.y}°, Z ${extraRotationDeg.z}°`;
+      if (!modelInfo.loaded) {
+        dimensionsReadout.textContent = "Load an OBJ to see its true-size dimensions.";
+        return;
+      }
+      const s = modelInfo.size;
+      dimensionsReadout.textContent = `Displayed size: ${(s.x * 1000).toFixed(1)} × ${(s.y * 1000).toFixed(1)} × ${(s.z * 1000).toFixed(1)} mm · Full length ${(modelInfo.longest * 1000).toFixed(1)} mm`;
+    }
+
+    function disposeRuler() {
+      while (rulerGroup.children.length) {
+        const child = rulerGroup.children.pop();
+        child.geometry?.dispose?.();
+        if (child.material) {
+          child.material.map?.dispose?.();
+          child.material.dispose?.();
+        }
+      }
+    }
+
+    function selectedRulerHeight() {
+      if (rulerInput.value === "1") return 1;
+      if (rulerInput.value === "2") return 2;
+      if (rulerInput.value === "model" && modelInfo.loaded) return modelInfo.longest;
+      return 0;
+    }
+
+    function makeRulerTexture(heightMetres) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 360;
+      canvas.height = Math.max(700, Math.min(4096, Math.ceil(heightMetres * 1900)));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "rgba(8, 11, 17, .86)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const pxPerM = canvas.height / heightMetres;
+      const centimetres = Math.floor(heightMetres * 100 + 0.00001);
+      for (let cm = 0; cm <= centimetres; cm += 1) {
+        const y = canvas.height - cm / 100 * pxPerM;
+        const major = cm % 10 === 0;
+        const half = cm % 5 === 0;
+        ctx.strokeStyle = major ? "#f4f7fb" : "rgba(183,192,209,.8)";
+        ctx.lineWidth = major ? 5 : 2;
+        ctx.beginPath();
+        ctx.moveTo(8, y);
+        ctx.lineTo(major ? 100 : half ? 68 : 43, y);
+        ctx.stroke();
+        if (major) {
+          ctx.fillStyle = "#f4f7fb";
+          ctx.font = "bold 34px system-ui";
+          ctx.textBaseline = cm === 0 ? "bottom" : "middle";
+          ctx.fillText(`${(cm / 100).toFixed(1)} m`, 116, y);
+        }
+      }
+      ctx.strokeStyle = "#73c6ff";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    function rebuildRuler() {
+      disposeRuler();
+      const height = selectedRulerHeight();
+      if (!height || !modelInfo.loaded) {
+        rulerGroup.visible = false;
+        return;
+      }
+      const width = 0.18;
+      const panel = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, height),
+        new THREE.MeshBasicMaterial({ map: makeRulerTexture(height), transparent: true, side: THREE.DoubleSide, depthWrite: false })
+      );
+      panel.position.set(modelInfo.size.x / 2 + 0.12 + width / 2, height / 2, 0);
+      rulerGroup.add(panel);
+      rulerGroup.visible = true;
+    }
+
+    function updatePlacementHeight() {
+      const mm = THREE.MathUtils.clamp(Number(heightOffsetInput.value) || 0, -1000, 3000);
+      heightOffsetInput.value = String(Math.round(mm));
+      if (placed) placementRoot.position.y = placedSurfaceY + mm / 1000;
+    }
+
+    function placeModelAtReticle() {
+      if (!renderer.xr.isPresenting || !reticle.visible) {
+        showChip("Move the phone slowly until a surface is detected");
+        return;
+      }
+      if (!loadedObject) {
+        showChip("Load an OBJ before placing it");
+        return;
+      }
+      if (placed && !tapReplaceInput.checked) return;
+      reticle.matrix.decompose(tempPosition, tempQuaternion, tempScale);
+      placementRoot.position.copy(tempPosition);
+      placedSurfaceY = tempPosition.y;
+      updatePlacementHeight();
+      if (faceCameraInput.checked) {
+        camera.getWorldPosition(cameraWorldPosition);
+        const dx = cameraWorldPosition.x - placementRoot.position.x;
+        const dz = cameraWorldPosition.z - placementRoot.position.z;
+        placementRoot.rotation.set(0, Math.atan2(dx, dz) + userYaw, 0);
+      } else {
+        placementRoot.rotation.set(0, userYaw, 0);
+      }
+      placementRoot.visible = true;
+      placed = true;
+      showChip("MODEL PLACED · tap another surface to move it", 2.0);
+    }
+
+    function forgetPlacement() {
+      placed = false;
+      placementRoot.visible = false;
+      if (renderer.xr.isPresenting) showChip("Aim at a surface and tap to place", 2.4);
+    }
+
+    function changeYaw(delta) {
+      userYaw += delta;
+      if (placed) placementRoot.rotateY(delta);
+    }
+
+    objInput.addEventListener("change", async () => {
+      const file = objInput.files?.[0];
+      if (!file) return;
+      sourceOBJName = file.name;
+      sourceOBJText = await file.text();
+      extraRotationDeg.x = extraRotationDeg.y = extraRotationDeg.z = 0;
+      forgetPlacement();
+      buildModelFromOBJ();
+    });
+    materialInput.addEventListener("change", () => loadMaterials(materialInput.files));
+
+    document.querySelectorAll("button[data-axis]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis = button.dataset.axis;
+        extraRotationDeg[axis] += Number(button.dataset.dir) * 90;
+        extraRotationDeg[axis] = ((extraRotationDeg[axis] + 540) % 360) - 180;
+        applyModelOrientation();
+      });
+    });
+    document.getElementById("resetOrientationBtn").addEventListener("click", () => {
+      extraRotationDeg.x = extraRotationDeg.y = extraRotationDeg.z = 0;
+      applyModelOrientation();
+    });
+    zUpInput.addEventListener("change", applyModelOrientation);
+    longestAxisVerticalInput.addEventListener("change", applyModelOrientation);
+    rulerInput.addEventListener("change", rebuildRuler);
+    heightOffsetInput.addEventListener("change", updatePlacementHeight);
+    document.getElementById("forgetPlacementBtn").addEventListener("click", forgetPlacement);
+    document.getElementById("replaceBtn").addEventListener("click", forgetPlacement);
+    document.getElementById("turnLeftBtn").addEventListener("click", () => changeYaw(Math.PI / 12));
+    document.getElementById("turnRightBtn").addEventListener("click", () => changeYaw(-Math.PI / 12));
+    document.getElementById("lowerBtn").addEventListener("click", () => {
+      heightOffsetInput.value = String((Number(heightOffsetInput.value) || 0) - 10);
+      updatePlacementHeight();
+    });
+    document.getElementById("raiseBtn").addEventListener("click", () => {
+      heightOffsetInput.value = String((Number(heightOffsetInput.value) || 0) + 10);
+      updatePlacementHeight();
+    });
+    document.getElementById("resetAllBtn").addEventListener("click", () => {
+      zUpInput.checked = true;
+      longestAxisVerticalInput.checked = true;
+      tapReplaceInput.checked = true;
+      faceCameraInput.checked = true;
+      rulerInput.value = "off";
+      heightOffsetInput.value = "0";
+      userYaw = 0;
+      extraRotationDeg.x = extraRotationDeg.y = extraRotationDeg.z = 0;
+      forgetPlacement();
+      applyModelOrientation();
+      updatePlacementHeight();
+      setStatus("Controls reset. Enter AR, scan a surface and tap to place the true-size OBJ.");
+    });
+    collapseBtn.addEventListener("click", () => {
+      setupPanel.classList.toggle("collapsed");
+      collapseBtn.textContent = setupPanel.classList.contains("collapsed") ? "Show" : "Hide";
+    });
+
+    // On a phone's immersive AR session, a screen tap is exposed as an XR select action.
+    const tapInput = renderer.xr.getController(0);
+    tapInput.addEventListener("select", placeModelAtReticle);
+    scene.add(tapInput);
+
+    const arButton = ARButton.createButton(renderer, {
+      requiredFeatures: ["hit-test"],
+      optionalFeatures: ["dom-overlay"],
+      domOverlay: { root: document.body }
+    });
+    arButton.textContent = "ENTER AR";
+    document.body.appendChild(arButton);
+
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+    let lastAnimationTime = 0;
+
+    renderer.xr.addEventListener("sessionstart", () => {
+      document.body.classList.add("inAR");
+      arToolbar.classList.add("active");
+      setupPanel.classList.add("collapsed");
+      collapseBtn.textContent = "Show";
+      forgetPlacement();
+      showChip("Scan a floor or table, then tap to place", 3.2);
+      setStatus("AR running. Slowly move the phone until the blue target appears, then tap outside the controls to place the model.");
+    });
+    renderer.xr.addEventListener("sessionend", () => {
+      document.body.classList.remove("inAR");
+      arToolbar.classList.remove("active");
+      reticle.visible = false;
+      placementRoot.visible = false;
+      placed = false;
+      hitTestSource?.cancel?.();
+      hitTestSource = null;
+      hitTestSourceRequested = false;
+      setStatus("AR exited. Press <b>ENTER AR</b> again to place the model in your surroundings.");
+    });
+
+    renderer.setAnimationLoop((time, frame) => {
+      const dt = lastAnimationTime ? Math.min(0.1, (time - lastAnimationTime) / 1000) : 0;
+      lastAnimationTime = time;
+      if (chipTimer > 0) {
+        chipTimer -= dt;
+        if (chipTimer <= 0) messageChip.classList.remove("show");
+      }
+      if (frame && renderer.xr.isPresenting) {
+        const session = renderer.xr.getSession();
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        if (!hitTestSourceRequested) {
+          hitTestSourceRequested = true;
+          session.requestReferenceSpace("viewer")
+            .then((viewerSpace) => session.requestHitTestSource({ space: viewerSpace }))
+            .then((source) => { hitTestSource = source; })
+            .catch(() => showChip("Surface detection is not available on this device", 3));
+        }
+        if (hitTestSource) {
+          const results = frame.getHitTestResults(hitTestSource);
+          if (results.length) {
+            const pose = results[0].getPose(referenceSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    updateReadouts();
+    if (!window.isSecureContext) {
+      setStatus("This page is not running from a secure address. Host it over <b>HTTPS</b> before opening it on your Samsung phone; WebXR AR cannot start from a normal local file.", true);
+    } else if (!navigator.xr) {
+      setStatus("WebXR is not available in this browser. Open the HTTPS page in Chrome on an ARCore-compatible Samsung phone with Google Play Services for AR installed.", true);
+    }
+  </script>
+</body>
+</html>
